@@ -1,0 +1,21 @@
+# Runpod serverless wrapper — provides handler harness + HTTP serve mode.
+runpod>=1.7.0
+
+# Job orchestration / file handling
+requests>=2.31.0
+pillow>=10.0.0
+toml>=0.10.2
+
+# Captioning (WD14 ONNX)
+# CPU is fine; captioning ~1-2s/image is not the bottleneck.
+onnxruntime>=1.17.0
+numpy<2.0
+huggingface_hub>=0.20.0
+
+# Supabase storage upload
+supabase>=2.5.0
+
+# NOTE: torch / transformers / diffusers / accelerate / bitsandbytes / xformers
+# come from the runpod/pytorch base image and Kohya's own requirements.txt
+# (installed in the next Dockerfile layer). We don't pin them here to avoid
+# accidental version conflicts with the base.

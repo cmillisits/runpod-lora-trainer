@@ -1,0 +1,47 @@
+# Reference / documentation only — actual training config is built in
+# `trainer/train.py::DEFAULTS` and merged with per-job overrides at runtime.
+# This file mirrors those defaults so they're readable / reviewable without
+# digging through Python.
+#
+# To override per-job, pass `config_overrides: { ... }` in the job input
+# (see README). Anything you put there is merged on top of the defaults.
+
+[network]
+network_module = "networks.lora"
+network_dim = 32                    # capacity — 32 is sweet spot for character LoRAs
+network_alpha = 16                  # half of dim — Kohya recommendation
+
+[optimizer]
+optimizer_type = "AdamW8bit"        # 8-bit Adam — fits SDXL training in 24GB
+learning_rate = 1e-4                # base LR (when text_encoder_lr / unet_lr unset)
+unet_lr = 1e-3                      # UNet trains 10x faster than text encoder
+text_encoder_lr = 5e-5              # text encoder kept gentle to avoid catastrophic forgetting
+lr_scheduler = "cosine"
+lr_warmup_steps = 100
+
+[training]
+max_train_steps = 2000              # ~16 epochs over 12 imgs × 10 repeats; overfit-resistant
+save_every_n_steps = 500            # checkpoints; pick best after if needed
+mixed_precision = "bf16"
+save_precision = "bf16"
+clip_skip = 2
+noise_offset = 0.0357               # better dark/light tones (Kohya recommended for photoreal)
+gradient_checkpointing = true
+xformers = true
+cache_latents = true
+cache_latents_to_disk = true
+no_half_vae = true                  # SDXL's fp16 VAE is unstable — keep VAE in fp32
+
+[dataset]
+resolution = 1024
+batch_size = 1
+enable_bucket = true                # multi-aspect; no need to crop to 1:1
+bucket_reso_steps = 64
+min_bucket_reso = 512
+max_bucket_reso = 2048
+num_repeats = 10                    # how many times each image is seen per epoch
+
+[caption]
+shuffle_caption = true              # better generalization on small datasets
+keep_tokens = 1                     # pin trigger word at front during shuffle
+caption_extension = ".txt"

@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+.venv/
+venv/
+env/
+
+.env
+.env.local
+.env.*.local
+
+# Trained artifacts / model dumps
+*.safetensors
+*.ckpt
+*.pt
+*.bin
+
+# Working dirs
+/tmp/
+/jobs/
+logs/
+
+.DS_Store
+*.swp
+.vscode/
+.idea/
