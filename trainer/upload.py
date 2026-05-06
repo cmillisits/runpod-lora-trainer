@@ -50,15 +50,19 @@ def upload_lora(slug: str, lora_path: str, lora_version: int, bucket: str = 'per
     print(f'[upload] {size_mb:.1f}MB -> {bucket}/{storage_path}')
 
     try:
-        with open(lora_path, 'rb') as f:
-            client.storage.from_(bucket).upload(
-                path=storage_path,
-                file=f.read(),
-                file_options={
-                    'content-type': 'application/octet-stream',
-                    'upsert': 'true',
-                },
-            )
+        # Pass the path directly (not f.read()) so supabase-py 2.5+ can stream
+        # the upload internally via httpx instead of loading all ~200MB into
+        # memory and POSTing as a single blob — the in-memory + single-POST
+        # path hangs on large files (observed at 217MB stalling 2+ min before
+        # cancel). The library handles open/read/close.
+        client.storage.from_(bucket).upload(
+            path=storage_path,
+            file=lora_path,
+            file_options={
+                'content-type': 'application/octet-stream',
+                'upsert': 'true',
+            },
+        )
         public_url = client.storage.from_(bucket).get_public_url(storage_path)
         return public_url
 
