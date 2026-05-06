@@ -28,10 +28,15 @@ PRETRAINED_MODEL = os.environ.get(
 #     overfitting on 10-15 image datasets.
 #   - 2000 steps × num_repeats=10 across ~12 imgs ≈ 16-17 effective epochs;
 #     usually well past convergence for character LoRAs.
-#   - AdamW8bit + grad checkpointing keeps memory under 24GB so RTX 4090
-#     remains a viable fallback.
+#   - AdamW (not 8bit) + grad checkpointing — bitsandbytes is fragile on
+#     different CUDA versions; plain AdamW is native PyTorch and never has
+#     version issues. Costs ~200MB extra VRAM for optimizer state which is
+#     irrelevant on a 48GB A40. If 8bit is desired later (smaller cards),
+#     pass `optimizer_type: AdamW8bit` via config_overrides.
 #   - noise_offset=0.0357 helps low/high-key tones (Kohya's recommended
 #     value for photoreal SDXL training).
+#   - clip_skip is intentionally OMITTED — Kohya logs a warning that
+#     clip_skip is a no-op for SDXL training (`SDXL学習ではclip_skipは動作しません`).
 DEFAULTS: Dict[str, Any] = {
     'output_name': 'v1',                     # overridden per-call
     'save_model_as': 'safetensors',
@@ -43,12 +48,11 @@ DEFAULTS: Dict[str, Any] = {
     'learning_rate': 1e-4,
     'unet_lr': 1e-3,
     'text_encoder_lr': 5e-5,
-    'optimizer_type': 'AdamW8bit',
+    'optimizer_type': 'AdamW',
     'lr_scheduler': 'cosine',
     'lr_warmup_steps': 100,
     'max_train_steps': 2000,
     'save_every_n_steps': 500,
-    'clip_skip': 2,
     'noise_offset': 0.0357,
     'gradient_checkpointing': True,
     # Use PyTorch native SDPA (since torch 2.0) instead of xformers — same
