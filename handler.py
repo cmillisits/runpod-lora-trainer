@@ -25,6 +25,17 @@ def handler(job):
     job_input = (job or {}).get('input') or {}
 
     try:
+        # Fail fast on missing upload credentials — without these, we'd run
+        # 10-15 minutes of training and only fail at the final upload step.
+        # Catching it at handler entry costs ~100ms vs ~$0.10 of wasted GPU.
+        if not os.environ.get('SUPABASE_URL') or not os.environ.get('SUPABASE_SERVICE_KEY'):
+            raise RuntimeError(
+                'SUPABASE_URL and SUPABASE_SERVICE_KEY must be set as env vars '
+                'on the Runpod endpoint (Settings → Edit → Environment Variables). '
+                'Refusing to start training without them — would otherwise discard '
+                'the trained LoRA at the upload step.'
+            )
+
         slug = _require(job_input, 'slug')
         ref_urls = _require(job_input, 'ref_urls')
         if not isinstance(ref_urls, list) or len(ref_urls) < 2:
