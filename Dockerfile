@@ -20,6 +20,12 @@ RUN git clone https://github.com/kohya-ss/sd-scripts.git /workspace/sd-scripts \
     && git checkout v0.9.1 \
     && pip install --no-cache-dir -r requirements.txt
 
+# xformers is optional in Kohya's requirements.txt (left out for users
+# who don't have a CUDA build installed). Our default training config
+# passes --xformers, so install it explicitly here. The runpod/pytorch
+# base ships torch 2.4+cu124; pip auto-resolves a matching xformers wheel.
+RUN pip install --no-cache-dir xformers
+
 # Pre-create accelerate default config so the launcher doesn't try
 # interactive setup on first run inside the serverless worker.
 RUN mkdir -p /root/.cache/huggingface/accelerate \
