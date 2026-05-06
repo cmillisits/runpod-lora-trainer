@@ -25,16 +25,25 @@ def handler(job):
     job_input = (job or {}).get('input') or {}
 
     try:
-        # Fail fast on missing upload credentials — without these, we'd run
-        # 10-15 minutes of training and only fail at the final upload step.
-        # Catching it at handler entry costs ~100ms vs ~$0.10 of wasted GPU.
-        if not os.environ.get('SUPABASE_URL') or not os.environ.get('SUPABASE_SERVICE_KEY'):
+        # Resolve Supabase credentials from EITHER the Runpod env vars OR
+        # the job input. Job-input takes precedence so the caller can
+        # override stale env vars without redeploying. Supports running
+        # this worker even when env-var configuration on the Runpod
+        # endpoint is broken (UI bugs, missing save buttons, etc.) by
+        # passing creds in the job payload directly.
+        #
+        # Once resolved, both are written to os.environ so trainer/upload.py
+        # can read them via the existing path — no code change downstream.
+        supabase_url = (job_input.get('supabase_url') or os.environ.get('SUPABASE_URL') or '').strip()
+        supabase_key = (job_input.get('supabase_service_key') or os.environ.get('SUPABASE_SERVICE_KEY') or '').strip()
+        if not supabase_url or not supabase_key:
             raise RuntimeError(
-                'SUPABASE_URL and SUPABASE_SERVICE_KEY must be set as env vars '
-                'on the Runpod endpoint (Settings → Edit → Environment Variables). '
-                'Refusing to start training without them — would otherwise discard '
-                'the trained LoRA at the upload step.'
+                'Supabase credentials missing. Either set SUPABASE_URL and '
+                'SUPABASE_SERVICE_KEY as env vars on the Runpod endpoint, OR '
+                'pass `supabase_url` and `supabase_service_key` in the job input.'
             )
+        os.environ['SUPABASE_URL'] = supabase_url
+        os.environ['SUPABASE_SERVICE_KEY'] = supabase_key
 
         slug = _require(job_input, 'slug')
         ref_urls = _require(job_input, 'ref_urls')
