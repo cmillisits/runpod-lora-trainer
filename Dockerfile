@@ -15,16 +15,19 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # ── Kohya sd-scripts ──────────────────────────────────────────────────
 # Pinned to a recent tag for reproducibility; bump after testing.
+#
+# We deliberately DON'T install xformers — pip auto-resolution had it
+# pull a wheel that bumped torch and silently broke torchvision's C++
+# ABI (RuntimeError: operator torchvision::nms does not exist), which
+# cascaded into transformers/diffusers import failures. PyTorch's
+# native SDPA (scaled dot product attention, since torch 2.0) does the
+# same job as xformers attention with zero extra deps. Slightly slower
+# (~10%) but trivially worth it for the version-mismatch resilience.
+# We pass --sdpa instead of --xformers in trainer/train.py defaults.
 RUN git clone https://github.com/kohya-ss/sd-scripts.git /workspace/sd-scripts \
     && cd /workspace/sd-scripts \
     && git checkout v0.9.1 \
     && pip install --no-cache-dir -r requirements.txt
-
-# xformers is optional in Kohya's requirements.txt (left out for users
-# who don't have a CUDA build installed). Our default training config
-# passes --xformers, so install it explicitly here. The runpod/pytorch
-# base ships torch 2.4+cu124; pip auto-resolves a matching xformers wheel.
-RUN pip install --no-cache-dir xformers
 
 # Pre-create accelerate default config so the launcher doesn't try
 # interactive setup on first run inside the serverless worker.

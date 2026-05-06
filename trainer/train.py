@@ -51,7 +51,11 @@ DEFAULTS: Dict[str, Any] = {
     'clip_skip': 2,
     'noise_offset': 0.0357,
     'gradient_checkpointing': True,
-    'xformers': True,
+    # Use PyTorch native SDPA (since torch 2.0) instead of xformers — same
+    # role (memory-efficient attention) with no extra dep, no risk of
+    # torch/torchvision ABI break from xformers wheels. ~10% slower than
+    # xformers in absolute throughput; trivial for our short training runs.
+    'sdpa': True,
     'cache_latents': True,
     'cache_latents_to_disk': True,
     'no_half_vae': True,
