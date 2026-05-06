@@ -3,10 +3,18 @@ dataset directory. Normalizes EXIF rotation, downsamples oversize images
 to keep VRAM/time predictable.
 """
 import os
+import re
 from typing import List
 
 import requests
 from PIL import Image, ImageOps
+
+
+# URLs sometimes arrive with embedded whitespace from paste artifacts —
+# e.g. terminal/UI line-wrap that drops a literal space in the middle of
+# a long URL, which then gets percent-encoded server-side and 400s. URLs
+# can never legitimately contain raw whitespace; strip it all.
+_WHITESPACE_RE = re.compile(r'\s+')
 
 
 # Resize bounds — Kohya's bucketing handles arbitrary aspects but very
@@ -29,7 +37,12 @@ def prepare_dataset(slug: str, ref_urls: List[str], work_dir: str) -> str:
 
     saved = 0
     failures = []
-    for idx, url in enumerate(ref_urls):
+    for idx, raw_url in enumerate(ref_urls):
+        # Normalize before fetch — see _WHITESPACE_RE comment for why.
+        url = _WHITESPACE_RE.sub('', raw_url or '')
+        if not url:
+            failures.append((raw_url, 'empty after whitespace strip'))
+            continue
         filename = f'{slug}_{idx:03d}.png'
         out_path = os.path.join(images_dir, filename)
         try:
