@@ -63,7 +63,14 @@ def upload_lora(slug: str, lora_path: str, lora_version: int, bucket: str = 'per
                 'upsert': 'true',
             },
         )
-        public_url = client.storage.from_(bucket).get_public_url(storage_path)
+        # Construct the public URL directly rather than going through
+        # client.storage.from_(bucket).get_public_url(). storage3 (the
+        # underlying lib) has version-dependent quirks — some versions
+        # return a trailing '?', some return a dict, and we've observed
+        # at least one version appending a literal '$0' to the path that
+        # gets baked into the stored lora_url column and later 404s when
+        # the worker tries to fetch it. Hand-formatting is bulletproof.
+        public_url = f"{url.rstrip('/')}/storage/v1/object/public/{bucket}/{storage_path}"
         return public_url
 
     except Exception as upload_err:
