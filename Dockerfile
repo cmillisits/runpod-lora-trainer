@@ -2,6 +2,15 @@
 # Smaller than nvidia/cuda:devel and pre-configured for serverless workers.
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
+# Explicit CUDA host-driver requirement. Our torch install below is
+# 2.7.0+cu128, which needs driver 560+ (= CUDA 12.8 host runtime). Older
+# Runpod pools on driver 535.x cannot run cu128 binaries — labeling this
+# explicitly makes nvidia-container-cli refuse those hosts at container
+# start instead of letting torch crash mid-job with the misleading
+# "no kernel image" error. Mirrors Runpod_backup/Dockerfile (commit
+# 12296c5 + d436a12 retrospective).
+ENV NVIDIA_REQUIRE_CUDA="cuda>=12.8"
+
 WORKDIR /workspace
 
 # System libs Pillow / OpenCV / Kohya need
@@ -28,6 +37,33 @@ RUN git clone https://github.com/kohya-ss/sd-scripts.git /workspace/sd-scripts \
     && cd /workspace/sd-scripts \
     && git checkout v0.9.1 \
     && pip install --no-cache-dir -r requirements.txt
+
+# Blackwell architecture support — RTX 5090 / RTX PRO 6000 are sm_120,
+# requires torch ≥2.7 + cu128 wheels. The base image ships torch 2.4.0,
+# whose CUDA kernels only cover sm_50–sm_90. On a 5090 the worker fails
+# Runpod's pre-launch fitness check with:
+#
+#     "NVIDIA GeForce RTX 5090 with CUDA capability sm_120 is not
+#      compatible with the current PyTorch installation."
+#
+# and exits before our handler.py is ever loaded.
+#
+# Force-reinstall AFTER the Kohya install above — Kohya's requirements.txt
+# pulls accelerate / transformers / diffusers and could otherwise drag
+# torch back down. torchvision + torchaudio minor versions must match
+# torch exactly. Same wheels as Runpod_backup (commit 12296c5).
+#
+# Host constraint: cu128 wheels need driver 560+ (= CUDA 12.8 host).
+# Enforced via NVIDIA_REQUIRE_CUDA env at the top of this Dockerfile.
+#
+# Kohya v0.9.1 compatibility note: the pinned tag was tested upstream
+# against torch 2.3–2.4. SDPA + native AdamW (our defaults) are stable
+# APIs that haven't moved across the 2.4→2.7 jump. If a training run
+# later fails on torch 2.7, the rollback is reverting this single RUN
+# block — endpoint falls back to sm_50–90 hosts and trains as before.
+RUN pip install --no-cache-dir --force-reinstall \
+    torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 \
+    --index-url https://download.pytorch.org/whl/cu128
 
 # Pre-create accelerate default config so the launcher doesn't try
 # interactive setup on first run inside the serverless worker.
