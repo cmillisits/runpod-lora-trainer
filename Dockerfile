@@ -61,9 +61,31 @@ RUN git clone https://github.com/kohya-ss/sd-scripts.git /workspace/sd-scripts \
 # APIs that haven't moved across the 2.4→2.7 jump. If a training run
 # later fails on torch 2.7, the rollback is reverting this single RUN
 # block — endpoint falls back to sm_50–90 hosts and trains as before.
+# Cache-buster note (2026-07-03): the previous attempt at this layer
+# (commit ac2ac5a, build 886de564) failed at Runpod buildkit's cache
+# export step with "unexpected commit digest ... failed precondition"
+# — the image tarball was produced successfully but the cache write
+# to Runpod's registry failed, so Runpod fell back to serving the
+# pre-ac2ac5a image (torch 2.4.1+cu124, no sm_120). Every worker
+# since has failed the fitness check. This comment invalidates the
+# layer hash so buildkit rebuilds this step and retries the cache
+# commit — if the original error was transient (race condition on
+# blob storage) it should now succeed. If it recurs, the fix is
+# Runpod-support-side.
 RUN pip install --no-cache-dir --force-reinstall \
     torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 \
     --index-url https://download.pytorch.org/whl/cu128
+
+# Post-install version assert — hard-fails the build if torch didn't
+# actually upgrade to 2.7 (e.g., a future Kohya deps bump silently
+# reverts it). Cheaper to fail here at build time than ship a broken
+# image and only discover the regression when workers can't boot.
+RUN python -c "import torch; \
+    assert torch.__version__.startswith('2.7'), \
+    f'BUILD FAIL: expected torch 2.7.x for sm_120 support, got {torch.__version__}'; \
+    assert torch.version.cuda == '12.8', \
+    f'BUILD FAIL: expected torch built for cu128, got cu{torch.version.cuda}'; \
+    print(f'torch={torch.__version__} cuda={torch.version.cuda} OK for Blackwell sm_120')"
 
 # Pre-create accelerate default config so the launcher doesn't try
 # interactive setup on first run inside the serverless worker.
