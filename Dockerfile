@@ -87,6 +87,42 @@ RUN python -c "import torch; \
     f'BUILD FAIL: expected torch built for cu128, got cu{torch.version.cuda}'; \
     print(f'torch={torch.__version__} cuda={torch.version.cuda} OK for Blackwell sm_120')"
 
+# ── NumPy re-pin (2026-07-24) ─────────────────────────────────────────
+# The `numpy<2.0` pin in requirements.txt (installed at line 22 above)
+# gets trampled by either Kohya's sd-scripts/requirements.txt install
+# or the torch==2.7.0 force-reinstall — one of them upgrades numpy to
+# 2.x. cv2 (from libgl1 + opencv-python pulled by Kohya) is compiled
+# against numpy 1.x, so at runtime every training job died at step
+# 3/4 with:
+#
+#     A module that was compiled using NumPy 1.x cannot be run in
+#     NumPy 2.4.4 as it may crash.
+#     AttributeError: _ARRAY_API not found
+#     ImportError: numpy.core.multiarray failed to import
+#     subprocess.CalledProcessError: sd-scripts exited with code 1
+#
+# Reproduced 2026-07-24 in logs-lora-trainer.txt on thunderdash25's
+# stuck personas (Kei + Lilliana). Every custom_persona LoRA training
+# had been silently failing on this bug for an unknown duration.
+#
+# Fix: reassert numpy<2 as the last-word install so no downstream pin
+# can trample it. Force-reinstall to be sure. Then assert at build
+# time so a future regression breaks the image build instead of
+# shipping a broken worker (following the torch assert pattern above).
+RUN pip install --no-cache-dir --force-reinstall "numpy<2"
+
+RUN python -c "import numpy; \
+    major = int(numpy.__version__.split('.')[0]); \
+    assert major < 2, \
+    f'BUILD FAIL: numpy must be <2 for cv2 (compiled against numpy 1.x), got {numpy.__version__}'; \
+    print(f'numpy={numpy.__version__} OK for cv2 (numpy 1.x ABI)')"
+
+# Belt-and-suspenders — verify cv2 actually imports cleanly with the
+# pinned numpy. Catches the ABI mismatch at build time so we don't
+# discover it 3 minutes into a real training job.
+RUN python -c "import cv2; import numpy; \
+    print(f'cv2 import OK, cv2={cv2.__version__}, numpy={numpy.__version__}')"
+
 # Pre-create accelerate default config so the launcher doesn't try
 # interactive setup on first run inside the serverless worker.
 RUN mkdir -p /root/.cache/huggingface/accelerate \
